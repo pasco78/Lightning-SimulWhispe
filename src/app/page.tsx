@@ -9,6 +9,8 @@ import ControlPanel from '@/components/ControlPanel';
 import TranslationHistory from '@/components/TranslationHistory';
 import ErrorNotification from '@/components/ErrorNotification';
 import FeedbackForm from '@/components/FeedbackForm';
+import TextInput from '@/components/TextInput';
+import InputModeToggle, { InputMode } from '@/components/InputModeToggle';
 import { getSpeechRecognitionService } from '@/services/speechRecognition';
 import { getTextToSpeechService } from '@/services/textToSpeech';
 import { TranslationHistoryManager } from '@/utils/translationHistory';
@@ -33,6 +35,7 @@ export default function Home() {
   const [isBidirectional, setIsBidirectional] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [inputMode, setInputMode] = useState<InputMode>('both');
 
   // Services
   const speechRecognition = useRef(getSpeechRecognitionService());
@@ -58,8 +61,12 @@ export default function Home() {
 
   // Translation function
   const translateText = useCallback(
-    async (text: string) => {
+    async (text: string, updateOriginalText: boolean = true) => {
       if (!text.trim()) return;
+
+      if (updateOriginalText) {
+        setOriginalText(text.trim());
+      }
 
       setStatus(prev => ({ ...prev, isTranslating: true, error: null }));
 
@@ -133,11 +140,19 @@ export default function Home() {
         }
 
         translationTimeout.current = setTimeout(() => {
-          translateText(result.transcript);
+          translateText(result.transcript, false);
         }, 500);
       } else {
         setInterimText(result.transcript);
       }
+    },
+    [translateText]
+  );
+
+  // Text input translation handler
+  const handleTextTranslate = useCallback(
+    (text: string) => {
+      translateText(text, true);
     },
     [translateText]
   );
@@ -294,12 +309,27 @@ export default function Home() {
             />
           </div>
 
+          <InputModeToggle
+            mode={inputMode}
+            onChange={setInputMode}
+            disabled={status.isListening}
+          />
+
           <StatusBar
             isListening={status.isListening}
             isTranslating={status.isTranslating}
             isSpeaking={status.isSpeaking}
             message={status.message}
           />
+
+          {(inputMode === 'text' || inputMode === 'both') && (
+            <TextInput
+              onTranslate={handleTextTranslate}
+              disabled={status.isListening}
+              isTranslating={status.isTranslating}
+              placeholder="번역할 텍스트를 입력하세요... (Ctrl+Enter로 번역)"
+            />
+          )}
 
           <TranslationDisplay
             originalText={displayText}
@@ -311,16 +341,44 @@ export default function Home() {
             ttsEnabled={ttsEnabled}
           />
 
-          <ControlPanel
-            isListening={status.isListening}
-            onToggleListening={toggleListening}
-            onReset={handleReset}
-            onExportHistory={handleExportHistory}
-            onClearHistory={handleClearHistory}
-            onToggleBidirectional={handleToggleBidirectional}
-            isBidirectional={isBidirectional}
-            disabled={!speechRecognition.current.isSupported()}
-          />
+          {(inputMode === 'voice' || inputMode === 'both') && (
+            <ControlPanel
+              isListening={status.isListening}
+              onToggleListening={toggleListening}
+              onReset={handleReset}
+              onExportHistory={handleExportHistory}
+              onClearHistory={handleClearHistory}
+              onToggleBidirectional={handleToggleBidirectional}
+              isBidirectional={isBidirectional}
+              disabled={!speechRecognition.current.isSupported()}
+            />
+          )}
+
+          {inputMode === 'text' && (
+            <div className="text-mode-controls">
+              <button
+                onClick={handleReset}
+                className="control-button secondary"
+                title="초기화"
+              >
+                초기화
+              </button>
+              <button
+                onClick={handleExportHistory}
+                className="control-button small"
+                title="기록 내보내기"
+              >
+                내보내기
+              </button>
+              <button
+                onClick={handleClearHistory}
+                className="control-button small danger"
+                title="기록 삭제"
+              >
+                기록 삭제
+              </button>
+            </div>
+          )}
 
           <div className="additional-controls">
             <button
